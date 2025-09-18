@@ -3,13 +3,26 @@ import os
 import logging
 from contextlib import contextmanager
 from typing import Optional, Tuple, Any
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-from config import DATABASE_PATH
+from config import DATABASE_TYPE, DATABASE_PATH, DATABASE_URL
 
 logger = logging.getLogger(__name__)
 
 def create_database() -> bool:
     """Создает базу данных и таблицы пользователей и приемов пищи"""
+    try:
+        if DATABASE_TYPE == "postgresql":
+            return _create_postgresql_tables()
+        else:
+            return _create_sqlite_tables()
+    except Exception as e:
+        logger.error(f"Error creating database: {e}")
+        return False
+
+def _create_sqlite_tables() -> bool:
+    """Создает таблицы в SQLite"""
     try:
         with sqlite3.connect(DATABASE_PATH) as conn:
             cursor = conn.cursor()
@@ -77,10 +90,87 @@ def create_database() -> bool:
             ''')
             
             conn.commit()
-        logger.info("Database created successfully")
+        logger.info("SQLite database created successfully")
         return True
     except Exception as e:
-        logger.error(f"Error creating database: {e}")
+        logger.error(f"Error creating SQLite database: {e}")
+        return False
+
+def _create_postgresql_tables() -> bool:
+    """Создает таблицы в PostgreSQL"""
+    try:
+        with psycopg2.connect(DATABASE_URL) as conn:
+            cursor = conn.cursor()
+            
+            # Создаем таблицу пользователей
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    telegram_id BIGINT UNIQUE NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    gender VARCHAR(50) NOT NULL,
+                    age INTEGER NOT NULL,
+                    height DECIMAL(5,2) NOT NULL,
+                    weight DECIMAL(5,2) NOT NULL,
+                    activity_level VARCHAR(100) NOT NULL,
+                    daily_calories INTEGER NOT NULL,
+                    subscription_type VARCHAR(50) DEFAULT 'trial',
+                    subscription_expires_at TIMESTAMP NULL,
+                    is_premium BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Создаем таблицу приемов пищи
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS meals (
+                    id SERIAL PRIMARY KEY,
+                    telegram_id BIGINT NOT NULL,
+                    meal_type VARCHAR(100) NOT NULL,
+                    meal_name VARCHAR(255) NOT NULL,
+                    dish_name VARCHAR(255) NOT NULL,
+                    calories INTEGER NOT NULL,
+                    analysis_type VARCHAR(100) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (telegram_id) REFERENCES users(telegram_id) ON DELETE CASCADE
+                )
+            ''')
+            
+            # Создаем таблицу для отслеживания использования функции "Узнать калории"
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS calorie_checks (
+                    id SERIAL PRIMARY KEY,
+                    telegram_id BIGINT NOT NULL,
+                    check_type VARCHAR(100) NOT NULL,
+                    input_data TEXT NOT NULL,
+                    result_data TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (telegram_id) REFERENCES users(telegram_id) ON DELETE CASCADE
+                )
+            ''')
+            
+            # Создаем индексы для оптимизации
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)
+            ''')
+            
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_meals_telegram_id ON meals(telegram_id)
+            ''')
+            
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_meals_date ON meals(created_at)
+            ''')
+            
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_meals_type ON meals(meal_type)
+            ''')
+            
+            conn.commit()
+            logger.info("PostgreSQL database created successfully")
+            return True
+    except Exception as e:
+        logger.error(f"Error creating PostgreSQL database: {e}")
         return False
 
 @contextmanager
@@ -88,10 +178,15 @@ def get_db_connection():
     """Контекстный менеджер для работы с базой данных с улучшенной обработкой ошибок"""
     conn = None
     try:
-        conn = sqlite3.connect(DATABASE_PATH)
-        conn.row_factory = sqlite3.Row  # Для доступа к колонкам по имени
-        yield conn
-    except sqlite3.Error as e:
+        if DATABASE_TYPE == "postgresql":
+            conn = psycopg2.connect(DATABASE_URL)
+            conn.autocommit = False
+            yield conn
+        else:
+            conn = sqlite3.connect(DATABASE_PATH)
+            conn.row_factory = sqlite3.Row  # Для доступа к колонкам по имени
+            yield conn
+    except (sqlite3.Error, psycopg2.Error) as e:
         logger.error(f"Database error: {e}")
         if conn:
             conn.rollback()
@@ -105,7 +200,10 @@ def get_user_by_telegram_id(telegram_id: int) -> Optional[Tuple[Any, ...]]:
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
+            if DATABASE_TYPE == "postgresql":
+                cursor.execute("SELECT * FROM users WHERE telegram_id = %s", (telegram_id,))
+            else:
+                cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
             return cursor.fetchone()
     except Exception as e:
         logger.error(f"Error getting user by telegram_id {telegram_id}: {e}")

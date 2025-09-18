@@ -16,4 +16,16 @@ API_KEYS = {
 BASE_URL = "https://api.studio.nebius.ai/v1/"
 
 # Настройки базы данных
-DATABASE_PATH = "users.db"
+import os
+
+# Определяем тип базы данных на основе переменной окружения
+DATABASE_TYPE = os.getenv("DATABASE_TYPE", "sqlite")
+
+if DATABASE_TYPE == "postgresql":
+    # PostgreSQL настройки для Railway
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL environment variable is required for PostgreSQL")
+else:
+    # SQLite для локальной разработки
+    DATABASE_PATH = "users.db"
