@@ -13,9 +13,12 @@ logger = logging.getLogger(__name__)
 def create_database() -> bool:
     """Создает базу данных и таблицы пользователей и приемов пищи"""
     try:
+        logger.info(f"Creating database. Type: {DATABASE_TYPE}")
         if DATABASE_TYPE == "postgresql":
+            logger.info(f"PostgreSQL URL: {DATABASE_URL[:20]}..." if DATABASE_URL else "DATABASE_URL is None")
             return _create_postgresql_tables()
         else:
+            logger.info(f"SQLite path: {DATABASE_PATH}")
             return _create_sqlite_tables()
     except Exception as e:
         logger.error(f"Error creating database: {e}")

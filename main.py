@@ -1,6 +1,7 @@
 import logging
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
-from config import BOT_TOKEN
+from config import BOT_TOKEN, DATABASE_TYPE, DATABASE_URL
+from database import create_database
 from bot_functions import (
     start_command, help_command, register_command, profile_command, reset_command, dayreset_command, admin_command, add_command, addmeal_command, addphoto_command, addtext_command, addvoice_command, subscription_command,
     handle_text_input, handle_callback_query, handle_photo, handle_voice
@@ -21,6 +22,15 @@ def main():
     """Основная функция запуска бота"""
     try:
         logger.info("Starting Calorigram bot...")
+        logger.info(f"Database type: {DATABASE_TYPE}")
+        logger.info(f"Database URL: {DATABASE_URL[:20]}..." if DATABASE_URL else "DATABASE_URL is None")
+        
+        # Инициализируем базу данных
+        if create_database():
+            logger.info("Database initialized successfully")
+        else:
+            logger.error("Failed to initialize database")
+            return
         
         # Создаем приложение
         application = Application.builder().token(BOT_TOKEN).build()
