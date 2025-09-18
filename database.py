@@ -99,6 +99,9 @@ def _create_sqlite_tables() -> bool:
 def _create_postgresql_tables() -> bool:
     """Создает таблицы в PostgreSQL"""
     try:
+        if not DATABASE_URL:
+            logger.error("DATABASE_URL is not set for PostgreSQL")
+            return False
         with psycopg2.connect(DATABASE_URL) as conn:
             cursor = conn.cursor()
             
@@ -179,6 +182,8 @@ def get_db_connection():
     conn = None
     try:
         if DATABASE_TYPE == "postgresql":
+            if not DATABASE_URL:
+                raise ValueError("DATABASE_URL is required for PostgreSQL")
             conn = psycopg2.connect(DATABASE_URL)
             conn.autocommit = False
             yield conn

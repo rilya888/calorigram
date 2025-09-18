@@ -21,6 +21,10 @@ import os
 # Определяем тип базы данных на основе переменной окружения
 DATABASE_TYPE = os.getenv("DATABASE_TYPE", "sqlite")
 
+# Инициализируем переменные базы данных
+DATABASE_PATH = "users.db"  # По умолчанию для SQLite
+DATABASE_URL = None  # По умолчанию None
+
 if DATABASE_TYPE == "postgresql":
     # PostgreSQL настройки для Railway
     DATABASE_URL = os.getenv("DATABASE_URL")
@@ -28,4 +32,4 @@ if DATABASE_TYPE == "postgresql":
         raise ValueError("DATABASE_URL environment variable is required for PostgreSQL")
 else:
     # SQLite для локальной разработки
-    DATABASE_PATH = "users.db"
+    DATABASE_PATH = os.getenv("DATABASE_PATH", "users.db")
